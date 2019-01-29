@@ -1,20 +1,11 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
-public class NeuralNetwork : MonoBehaviour
+public class NeuralNetwork
 {
 	public Layer[] Layers;
 	public int NumberOfLayers;
 	public float Bias;
 	public int[] NumberOfNeurons;
-
-
-	public LayerMask layer;
-	public GameObject[] Sensors;
-	Rigidbody rb;
-	Vector3 startPos;
 
 	public class Layer
 	{
@@ -25,37 +16,7 @@ public class NeuralNetwork : MonoBehaviour
 	{
 		public float Value { get; set; }
 		public float[] Weights { get; set; }
-	}
-
-	private void Start()
-	{
-		rb = GetComponent<Rigidbody>();
-		startPos = transform.position;
-		BuildNetwork();		
-	}
-
-	private void Update()
-	{
-		BuildNetwork();
-		for (int i = 0; i < Layers[0].Neurons.Length; i++)
-		{
-			RaycastHit hitInfo;
-			Ray ray = new Ray(transform.position, Sensors[i].transform.up);
-			if(Physics.Raycast(ray, out hitInfo, 100f, layer))
-			{
-				Vector3 hitPoint = hitInfo.point;
-				Layers[0].Neurons[i].Value = (hitPoint - transform.position).magnitude * 0.01f;
-			}
-			else
-			{
-				Layers[0].Neurons[i].Value = 1f;
-			}
-		}		
-
-		rb.velocity = ((transform.right * Layers[Layers.Length - 1].Neurons[0].Value) +
-							(transform.up * Layers[Layers.Length - 1].Neurons[1].Value));
-									
-		//PrintTest();
+		public float[] WeightValues { get; set; }
 	}
 
 	public void BuildNetwork()
@@ -80,47 +41,83 @@ public class NeuralNetwork : MonoBehaviour
 				else
 				{
 					Layers[i].Neurons[j].Weights = new float[Layers[i - 1].Neurons.Length];
+					Layers[i].Neurons[j].WeightValues = new float[Layers[i].Neurons[j].Weights.Length];
 
 					float val = 0f;
 					for (int k = 0; k < Layers[i].Neurons[j].Weights.Length; k++)
 					{
-						Layers[i].Neurons[j].Weights[k] = Layers[i - 1].Neurons[k].Value * UnityEngine.Random.Range(-1f, 1f);
+						Layers[i].Neurons[j].WeightValues[k] = Random.Range(-10f, 10f);
+						Layers[i].Neurons[j].Weights[k] = Layers[i - 1].Neurons[k].Value * Layers[i].Neurons[j].WeightValues[k];
 						val += Layers[i].Neurons[j].Weights[k];
 					}
 
-					Layers[i].Neurons[j].Value = val - Bias;
+					Layers[i].Neurons[j].Value = Mathf.Max(0f, val - Bias);
 				}
 			}
 		}
 	}
 
-	private void PrintTest()
+	public void UpdateNetwork()
 	{
-		int inputCount = 1;
-		int outputCount = 1;
-		for (int i = 0; i < Layers[0].Neurons.Length; i++)
-		{
-			print($"Input-Neuron {inputCount} = {Layers[0].Neurons[i].Value}");
-			inputCount++;
-		}
-		for (int i = 0; i < Layers[Layers.Length - 1].Neurons.Length; i++)
-		{
-			print($"Output-Neuron {outputCount} = {Layers[Layers.Length - 1].Neurons[i].Value}");
-			outputCount++;
-		}
-	}
-
-	private void OnCollisionEnter(Collision collision)
-	{
-		transform.position = startPos;
-		print("test");
-		for (int i = 1; i < Layers.Length; i++)
+		for (int i = 0; i < Layers.Length; i++)
 		{
 			for (int j = 0; j < Layers[i].Neurons.Length; j++)
 			{
-				for (int k = 0; k < Layers[i].Neurons[j].Weights.Length; k++)
+				if (Layers[i] == Layers[0])
 				{
-					Layers[i].Neurons[j].Weights[k] *= UnityEngine.Random.Range(-2f, 2f);
+					continue;
+				}
+				else
+				{
+					float val = 0f;
+					for (int k = 0; k < Layers[i].Neurons[j].Weights.Length; k++)
+					{
+						Layers[i].Neurons[j].Weights[k] = Layers[i - 1].Neurons[k].Value * Layers[i].Neurons[j].WeightValues[k];
+						val += Layers[i].Neurons[j].Weights[k];
+					}
+
+					Layers[i].Neurons[j].Value = Mathf.Max(0f, val - Bias);
+				}
+			}
+		}
+	}
+
+	public void BackProp(Vector3 velocity, Vector3 corrector)
+	{
+		float x = velocity.x - corrector.x;
+		float y = velocity.y - corrector.y;
+
+		float xCorr = Mathf.Pow((Layers[Layers.Length - 1].Neurons[0].Value - x), 2f);
+		float yCorr = Mathf.Pow((Layers[Layers.Length - 1].Neurons[1].Value - y), 2f);
+
+		float cost = xCorr + yCorr;
+
+		for (int i = Layers.Length - 1; i > 0; i--)
+		{
+			if (i == Layers.Length - 1)
+			{
+				for (int j = 0; j < Layers[i].Neurons.Length; j++)
+				{
+					for (int k = 0; k < Layers[i].Neurons[j].WeightValues.Length; k++)
+					{
+						Layers[i].Neurons[j].WeightValues[k] += cost;
+					}
+				}
+			}
+			else
+			{
+				float hiddenCost = 0f;
+				for (int j = 0; j < Layers[i + 1].Neurons.Length; j++)
+				{
+					hiddenCost += Layers[i].Neurons[j].Value;
+				}
+
+				for (int j = 0; j < Layers[i].Neurons.Length; j++)
+				{
+					for (int k = 0; k < Layers[i].Neurons[j].WeightValues.Length; k++)
+					{
+						Layers[i].Neurons[j].WeightValues[k] += cost;
+					}
 				}
 			}
 		}
